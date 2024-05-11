@@ -86,6 +86,7 @@ final class Decompiler {
         yield methodName + "(" + operands.stream().map(this::valueText)
                 .collect(Collectors.joining(",")) + ")";
       }
+      case CoreOps.ConvOp conv -> "(" + conv.resultType().toString() + ")" + valueText(conv.operands().getFirst());
       case CoreOps.FieldAccessOp.FieldLoadOp load -> {
         List<Value> operands = load.operands();
         if (!operands.isEmpty()) {

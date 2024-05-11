@@ -1,5 +1,6 @@
 package one.util.asserts;
 
+import javax.lang.model.type.PrimitiveType;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -7,6 +8,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.code.*;
 import java.lang.reflect.code.op.CoreOps;
 import java.lang.reflect.code.op.ExtendedOps;
+import java.lang.reflect.code.type.JavaType;
 import java.lang.reflect.code.type.TypeDefinition;
 import java.util.*;
 import java.util.function.DoubleBinaryOperator;
@@ -216,7 +218,7 @@ final class Interpreter {
           }
           // TODO: non-primitive arrays
         }
-        // TODO: 
+        // TODO
         yield new UnsupportedNode(op, List.of());
       }
       case CoreOps.NotOp n -> {
@@ -238,6 +240,14 @@ final class Interpreter {
           default -> operand.derivedFailure(n);
         };
       }
+      case CoreOps.ConvOp conv -> {
+        Node operand = buildModel(conv.operands().getFirst());
+        if (!(operand instanceof ValueNode valNode)) {
+          yield operand.derivedFailure(conv);
+        }
+        Object result = convert(conv.resultType(), valNode.value());
+        yield fromValue(conv, result, List.of(operand));
+      }
       case ExtendedOps.JavaConditionalOp cond -> {
         boolean isAnd = op instanceof ExtendedOps.JavaConditionalAndOp;
         boolean value = isAnd;
@@ -257,11 +267,70 @@ final class Interpreter {
         yield new ValueNode(cond, value, nodes);
       }
       // TODO: new instance
-      // TODO: ?:
-      // TODO: primitive conversion
+      // TODO: ?
       default -> new UnsupportedNode(op, List.of());
     };
     return res;
+  }
+
+  private Object convert(TypeElement typeElement, Object value) {
+    return switch (value) {
+      case Integer i -> typeElement == JavaType.BYTE ? (byte) (int) i
+              : typeElement == JavaType.SHORT ? (short) (int) i
+              : typeElement == JavaType.CHAR ? (char) (int) i
+              : typeElement == JavaType.LONG ? (long) (int) i
+              : typeElement == JavaType.FLOAT ? (float) (int) i
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (int) i
+              : null;
+      case Long l -> typeElement == JavaType.BYTE ? (byte) (long) l
+              : typeElement == JavaType.SHORT ? (short) (long) l
+              : typeElement == JavaType.CHAR ? (char) (long) l
+              : typeElement == JavaType.INT ? (int) (long) l
+              : typeElement == JavaType.FLOAT ? (float) (long) l
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (long) l
+              : null;
+
+      case Short s -> typeElement == JavaType.BYTE ? (byte) (short) s
+              : typeElement == JavaType.INT ? (int) (short) s
+              : typeElement == JavaType.CHAR ? (char) (short) s
+              : typeElement == JavaType.LONG ? (long) (short) s
+              : typeElement == JavaType.FLOAT ? (float) (short) s
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (short) s
+              : null;
+
+      case Byte b -> typeElement == JavaType.SHORT ? (short) (byte) b
+              : typeElement == JavaType.INT ? (int) (byte) b
+              : typeElement == JavaType.CHAR ? (char) (byte) b
+              : typeElement == JavaType.LONG ? (long) (byte) b
+              : typeElement == JavaType.FLOAT ? (float) (byte) b
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (byte) b
+              : null;
+
+      case Character c -> typeElement == JavaType.BYTE ? (byte) (char) c
+              : typeElement == JavaType.SHORT ? (short) (char) c
+              : typeElement == JavaType.INT ? (int) (char) c
+              : typeElement == JavaType.LONG ? (long) (char) c
+              : typeElement == JavaType.FLOAT ? (float) (char) c
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (char) c
+              : null;
+
+      case Float f -> typeElement == JavaType.BYTE ? (byte) (float) f
+              : typeElement == JavaType.SHORT ? (short) (float) f
+              : typeElement == JavaType.INT ? (int) (float) f
+              : typeElement == JavaType.CHAR ? (char) (float) f
+              : typeElement == JavaType.LONG ? (long) (float) f
+              : typeElement == JavaType.DOUBLE ? (Object) (double) (float) f
+              : null;
+
+      case Double d -> typeElement == JavaType.BYTE ? (byte) (double) d
+              : typeElement == JavaType.SHORT ? (short) (double) d
+              : typeElement == JavaType.INT ? (int) (double) d
+              : typeElement == JavaType.CHAR ? (char) (double) d
+              : typeElement == JavaType.LONG ? (long) (double) d
+              : typeElement == JavaType.FLOAT ? (Object) (float) (double) d
+              : null;
+      default -> null;
+    };
   }
 
   private static Integer intValue(Node node) {

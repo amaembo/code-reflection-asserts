@@ -106,6 +106,11 @@ public final class InterpreterTest {
             x[1] == x.length -> false
             """);
   }
+  
+  @Test
+  public void testPrimitiveWidening() {
+    doTest(() -> 2.0 + 2 == 4, "(double)2 -> 2.0\n2.0 + (double)2 -> 4.0\n(double)4 -> 4.0\n2.0 + (double)2 == (double)4 -> true\n");
+  }
 
   @Test
   public void testArrayCreation() {
