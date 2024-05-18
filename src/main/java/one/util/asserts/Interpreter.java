@@ -253,7 +253,7 @@ final class Interpreter {
         if (children.size() != 3) {
           yield new UnsupportedNode(ternary, List.of());
         }
-        Node condition = buildModel(children.get(0).entryBlock().terminatingOp());
+        Node condition = buildModel(children.getFirst().entryBlock().terminatingOp());
         if (!(condition instanceof ValueNode condValNode) || !(condValNode.value() instanceof Boolean cond)) {
           yield condition.derivedFailure(ternary, List.of(condition));
         }
@@ -280,6 +280,34 @@ final class Interpreter {
           }
         }
         yield new ValueNode(cond, value, nodes);
+      }
+      case CoreOps.InstanceOfOp instanceOf -> {
+        Node operand = buildModel(instanceOf.operands().getFirst());
+        if (!(operand instanceof ValueNode valNode)) {
+          yield operand.derivedFailure(instanceOf);
+        }
+        TypeDefinition type = instanceOf.type().toTypeDefinition();
+        Class<?> aClass;
+        try {
+          aClass = lookup.findClass(type.identifier());
+        } catch (ClassNotFoundException | IllegalAccessException e) {
+          yield new ExceptionNode(instanceOf, e, List.of(operand));
+        }
+        yield new ValueNode(instanceOf, aClass.isInstance(valNode.value()), List.of(operand));
+      }
+      case CoreOps.CastOp castOp -> {
+        Node operand = buildModel(castOp.operands().getFirst());
+        if (!(operand instanceof ValueNode valNode)) {
+          yield operand.derivedFailure(castOp);
+        }
+        TypeDefinition type = castOp.type().toTypeDefinition();
+        Class<?> aClass;
+        try {
+          aClass = lookup.findClass(type.identifier());
+        } catch (ClassNotFoundException | IllegalAccessException e) {
+          yield new ExceptionNode(castOp, e, List.of(operand));
+        }
+        yield new ValueNode(castOp, aClass.cast(valNode.value()), List.of(operand));
       }
       // TODO: new instance
       // TODO: switch expression

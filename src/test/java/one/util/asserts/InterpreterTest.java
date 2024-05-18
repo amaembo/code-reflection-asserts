@@ -193,6 +193,34 @@ public final class InterpreterTest {
   }
   
   @Test
+  public void testInstanceOf() {
+    Object obj = "Hello";
+    doTest(() -> obj instanceof String, """
+            obj -> "Hello"
+            obj instanceof String -> true
+            """);
+  }
+  
+  @Test
+  public void testCast() {
+    Object obj = "Hello";
+    doTest(() -> ((String)obj).length() == 5, """
+            obj -> "Hello"
+            (String)obj -> "Hello"
+            (String)obj.length() -> 5
+            (String)obj.length() == 5 -> true
+            """);
+    record LocalClass(int x) {}
+    Object obj2 = new LocalClass(1);
+    doTest(() -> ((LocalClass) obj2).x() == 1, """
+            obj2 -> LocalClass[x=1]
+            (LocalClass)obj2 -> LocalClass[x=1]
+            (LocalClass)obj2.x() -> 1
+            (LocalClass)obj2.x() == 1 -> true
+            """);
+  }
+  
+  @Test
   public void testTernary() {
     int a = 2;
     int b = 3;

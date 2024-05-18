@@ -75,7 +75,7 @@ final class Decompiler {
         }
         String methodName;
         try {
-          Executable method = inv.invokeDescriptor().resolveToMember(MethodHandles.publicLookup());
+          Executable method = inv.invokeDescriptor().resolveToMember(MethodHandles.lookup());
           methodName = method.getDeclaringClass().getSimpleName() + "." + method.getName();
         } catch (ReflectiveOperationException e) {
           methodName = formatTypeName(inv.invokeDescriptor().refType()) + "." + inv.invokeDescriptor().name();
@@ -90,7 +90,7 @@ final class Decompiler {
           yield valueText(operands.getFirst()) + "." + load.fieldDescriptor().name();
         }
         try {
-          Field field = load.fieldDescriptor().resolveToMember(MethodHandles.publicLookup());
+          Field field = load.fieldDescriptor().resolveToMember(MethodHandles.lookup());
           yield field.getDeclaringClass().getSimpleName() + "." + field.getName();
         } catch (ReflectiveOperationException e) {
           yield formatTypeName(load.fieldDescriptor().refType()) + "." + load.fieldDescriptor().name();
@@ -115,6 +115,9 @@ final class Decompiler {
       case CoreOps.ReturnOp _ -> "return " + valueText(op.operands().getFirst());
       case CoreOps.YieldOp _ -> valueText(op.operands().getFirst());
       case CoreOps.ConstantOp c -> formatter.format(c.value());
+      case CoreOps.CastOp cast -> "(" + formatTypeName(cast.type()) + ")" + valueText(op.operands().getFirst());  
+      case CoreOps.InstanceOfOp instanceOf -> 
+              valueText(op.operands().getFirst()) +" instanceof " + formatTypeName(instanceOf.type());
       case Interpreter.ThisOp _ -> "this";
       case ExtendedOps.JavaConditionalOp cand ->
               cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp()))
@@ -132,6 +135,11 @@ final class Decompiler {
   private static String formatTypeName(TypeElement typeElement) {
     TypeDefinition typeDefinition = typeElement.toTypeDefinition();
     String identifier = typeDefinition.identifier();
+    try {
+      return MethodHandles.lookup().findClass(identifier).getSimpleName();
+    } catch (ClassNotFoundException | IllegalAccessException _) {
+      
+    }
     int dotPos = identifier.lastIndexOf('.');
     if (dotPos > -1) {
       return identifier.substring(dotPos + 1);
