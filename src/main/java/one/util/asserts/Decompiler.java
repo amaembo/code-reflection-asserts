@@ -3,10 +3,7 @@ package one.util.asserts;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
-import java.lang.reflect.code.Block;
-import java.lang.reflect.code.Op;
-import java.lang.reflect.code.TypeElement;
-import java.lang.reflect.code.Value;
+import java.lang.reflect.code.*;
 import java.lang.reflect.code.op.CoreOps;
 import java.lang.reflect.code.op.ExtendedOps;
 import java.lang.reflect.code.op.OpDeclaration;
@@ -122,6 +119,12 @@ final class Decompiler {
       case ExtendedOps.JavaConditionalOp cand ->
               cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp()))
                       .collect(Collectors.joining(" " + opSymbol(cand) + " "));
+      case ExtendedOps.JavaConditionalExpressionOp ternary -> {
+        List<Body> children = ternary.children();
+        yield opText(children.get(0).entryBlock().terminatingOp()) + " ? " +
+                opText(children.get(1).entryBlock().terminatingOp()) + " : " +
+                opText(children.get(2).entryBlock().terminatingOp());
+      }
       default -> op.toText() + ":" + op.getClass();
     };
   }

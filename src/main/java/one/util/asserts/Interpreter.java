@@ -248,6 +248,21 @@ final class Interpreter {
         Object result = convert(conv.resultType(), valNode.value());
         yield fromValue(conv, result, List.of(operand));
       }
+      case ExtendedOps.JavaConditionalExpressionOp ternary -> {
+        List<Body> children = ternary.children();
+        if (children.size() != 3) {
+          yield new UnsupportedNode(ternary, List.of());
+        }
+        Node condition = buildModel(children.get(0).entryBlock().terminatingOp());
+        if (!(condition instanceof ValueNode condValNode) || !(condValNode.value() instanceof Boolean cond)) {
+          yield condition.derivedFailure(ternary, List.of(condition));
+        }
+        Node branch = buildModel(children.get(cond ? 1 : 2).entryBlock().terminatingOp());
+        if (!(branch instanceof ValueNode thenValNode)) {
+          yield branch.derivedFailure(ternary, List.of(condition, branch));
+        }
+        yield new ValueNode(ternary, thenValNode.value(), List.of(condition, branch));
+      }
       case ExtendedOps.JavaConditionalOp cond -> {
         boolean isAnd = op instanceof ExtendedOps.JavaConditionalAndOp;
         boolean value = isAnd;
@@ -267,7 +282,9 @@ final class Interpreter {
         yield new ValueNode(cond, value, nodes);
       }
       // TODO: new instance
-      // TODO: ?
+      // TODO: switch expression
+      // TODO: lambda?
+      // TODO: method ref?
       default -> new UnsupportedNode(op, List.of());
     };
     return res;

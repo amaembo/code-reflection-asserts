@@ -4,8 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.code.Quoted;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -182,7 +180,7 @@ public final class InterpreterTest {
   }
   
   @Test
-  public void testConditional() {
+  public void testConditionalAndOr() {
     doTest(() -> 2 < 3 && 4 > 5, """
             2 < 3 -> true
             4 > 5 -> false
@@ -191,6 +189,36 @@ public final class InterpreterTest {
     doTest(() -> 2 < 3 || 4 > 5, """
             2 < 3 -> true
             2 < 3 || 4 > 5 -> true
+            """);
+  }
+  
+  @Test
+  public void testTernary() {
+    int a = 2;
+    int b = 3;
+    doTest(() -> (a > b ? "xyz" : "ab").length() == 3, """
+            a -> 2
+            b -> 3
+            a > b -> false
+            a > b ? "xyz" : "ab" -> "ab"
+            a > b ? "xyz" : "ab".length() -> 2
+            a > b ? "xyz" : "ab".length() == 3 -> false
+            """);
+    doTest(() -> (a < b ? "xyz" : "ab").length() == 3, """
+            a -> 2
+            b -> 3
+            a < b -> true
+            a < b ? "xyz" : "ab" -> "xyz"
+            a < b ? "xyz" : "ab".length() -> 3
+            a < b ? "xyz" : "ab".length() == 3 -> true
+            """);
+    doTest(() -> (a < 1 / 0 ? "xyz" : "ab").length() == 3, """
+            a -> 2
+            1 / 0 -> throws java.lang.ArithmeticException: / by zero
+            a < 1 / 0 -> throws java.lang.ArithmeticException: / by zero
+            a < 1 / 0 ? "xyz" : "ab" -> throws java.lang.ArithmeticException: / by zero
+            a < 1 / 0 ? "xyz" : "ab".length() -> throws java.lang.ArithmeticException: / by zero
+            a < 1 / 0 ? "xyz" : "ab".length() == 3 -> throws java.lang.ArithmeticException: / by zero
             """);
   }
   
