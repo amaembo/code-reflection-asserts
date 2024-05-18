@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.code.Quoted;
 import java.util.List;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -25,6 +26,19 @@ public final class InterpreterTest {
             3 * 2 -> 6
             3 * 2 / 4 -> 1
             3 * 2 / 4 >= 5 -> false
+            """);
+  }
+  
+  @Test
+  public void testNegative() {
+    doTest(() -> -2 -2 == -4, """
+            -2 - 2 -> -4
+            -2 - 2 == -4 -> true
+            """);
+    doTest(() -> -(2 + 2) == -4, """
+            2 + 2 -> 4
+            -2 + 2 -> -4
+            -2 + 2 == -4 -> true
             """);
   }
 
@@ -120,14 +134,66 @@ public final class InterpreterTest {
             new int[10][5].length == 10 -> true
             """);
   }
+
+  static final class Point {
+    public final int x;
+    public final int y;
+
+    Point(int x, int y) {
+      this.x = x;
+      this.y = y;
+    }
+    
+    void check() {
+      doTest(() -> x == y, """
+              this -> [1; 3]
+              this.x -> 1
+              this -> [1; 3]
+              this.y -> 3
+              this.x == this.y -> false
+              """);
+    }
+
+    @Override
+    public String toString() {
+      return "[" + x + "; " + y + "]";
+    }
+  }
+  
+  @Test
+  public void testFieldAccess() {
+    Point point = new Point(1, 3);
+    doTest(() -> point.x == point.y - 2, """
+            point -> [1; 3]
+            point.x -> 1
+            point -> [1; 3]
+            point.y -> 3
+            point.y - 2 -> 1
+            point.x == point.y - 2 -> true
+            """);
+    point.check();
+  }
   
   @Test
   public void testList() {
     doTest(() -> List.of("a", "b", "c", "d").contains("e"), "List.of(\"a\",\"b\",\"c\",\"d\") -> [\"a\", \"b\", \"c\", \"d\"]\n" +
             "List.of(\"a\",\"b\",\"c\",\"d\").contains(\"e\") -> false\n");
   }
+  
+  @Test
+  public void testConditional() {
+    doTest(() -> 2 < 3 && 4 > 5, """
+            2 < 3 -> true
+            4 > 5 -> false
+            2 < 3 && 4 > 5 -> false
+            """);
+    doTest(() -> 2 < 3 || 4 > 5, """
+            2 < 3 -> true
+            2 < 3 || 4 > 5 -> true
+            """);
+  }
 
-  private void doTest(AssertionCondition condition, String expected) {
+  private static void doTest(AssertionCondition condition, String expected) {
     Quoted quoted = condition.quoted();
     Node model = Interpreter.buildModel(quoted);
     assertEquals(expected, DefaultAssertionFormatter.DEFAULT.formatAssertion(model));
