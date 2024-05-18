@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.code.Quoted;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -190,6 +191,17 @@ public final class InterpreterTest {
     doTest(() -> 2 < 3 || 4 > 5, """
             2 < 3 -> true
             2 < 3 || 4 > 5 -> true
+            """);
+  }
+  
+  @Test
+  public void testUnsupported() {
+    doTest(() -> {
+      int x = 10;
+      return x > 2;
+    }, """
+            Unsupported node: x (class java.lang.reflect.code.op.CoreOps$VarAccessOp$VarLoadOp)
+            Unsupported node: x > 2 (class java.lang.reflect.code.op.CoreOps$GtOp)
             """);
   }
 
