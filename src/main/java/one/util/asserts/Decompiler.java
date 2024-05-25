@@ -18,6 +18,46 @@ import java.util.stream.Collectors;
  * It's required to support only the ops supported by the interpreter.
  */
 final class Decompiler {
+  enum Precedence {
+    LITERAL,
+    DEREFERENCE,
+    POSTFIX,
+    UNARY,
+    MULTIPLICATIVE,
+    ADDITIVE,
+    SHIFT,
+    RELATIONAL,
+    EQUALITY,
+    BITWISE_AND,
+    BITWISE_XOR,
+    BITWISE_OR,
+    LOGICAL_AND,
+    LOGICAL_OR,
+    TERNARY,
+    ASSIGNMENT,
+    PARENTHESES;
+
+    static Precedence fromOp(Op op) {
+      return switch (op) {
+        case ExtendedOps.JavaConditionalExpressionOp _ -> TERNARY;
+        case ExtendedOps.JavaConditionalAndOp _ -> LOGICAL_AND;
+        case ExtendedOps.JavaConditionalOrOp _ -> LOGICAL_OR;
+        case CoreOps.AddOp _, CoreOps.SubOp _ -> ADDITIVE;
+        case CoreOps.MulOp _, CoreOps.DivOp _, CoreOps.ModOp _ -> MULTIPLICATIVE;
+        case CoreOps.AshrOp _, CoreOps.LshrOp _, CoreOps.LshlOp _ -> SHIFT;
+        case CoreOps.EqOp _, CoreOps.NeqOp _ -> EQUALITY;
+        case CoreOps.BinaryTestOp _, CoreOps.InstanceOfOp _ -> RELATIONAL;
+        case CoreOps.AndOp _ -> BITWISE_AND;
+        case CoreOps.OrOp _ -> BITWISE_OR;
+        case CoreOps.XorOp _ -> BITWISE_XOR;
+        case CoreOps.UnaryOp _, CoreOps.ConvOp _, CoreOps.CastOp _ -> UNARY;
+        case CoreOps.ArrayAccessOp _, CoreOps.InvokeOp _, CoreOps.FieldAccessOp _,
+             CoreOps.ArrayLengthOp _ -> DEREFERENCE;
+        default -> LITERAL;
+      };
+    }
+  }
+  
   static final Decompiler DEFAULT = new Decompiler(DefaultValueFormatter.DEFAULT);
   
   private static final Map<String, String> ops =
@@ -56,20 +96,34 @@ final class Decompiler {
    * @return formatted value
    */
   String valueText(Value value) {
+    return valueText(value, Precedence.PARENTHESES);
+  }
+
+  /**
+   * @param value      value to format
+   * @param precedence outer operation precedence
+   * @return formatted value
+   */
+  String valueText(Value value, Precedence precedence) {
     return switch (value) {
-      case Op.Result result -> opText(result.op());
+      case Op.Result result -> opText(result.op(), precedence);
       case Block.Parameter _ -> "this";
     };
   }
 
+  /**
+   * @param op operation to decompile
+   * @return operation text
+   */
   String opText(Op op) {
+    Precedence precedence = Precedence.fromOp(op);
     return switch (op) {
       case CoreOps.VarOp varOp -> varOp.varName();
       case CoreOps.VarAccessOp.VarLoadOp load -> valueText(load.operands().getFirst());
       case CoreOps.InvokeOp inv -> {
         List<Value> operands = inv.operands();
         if (inv.hasReceiver()) {
-          yield valueText(operands.getFirst()) + "." + inv.invokeDescriptor().name() + "("
+          yield valueText(operands.getFirst(), precedence) + "." + inv.invokeDescriptor().name() + "("
                   + operands.stream().skip(1).map(this::valueText)
                   .collect(Collectors.joining(", ")) + ")";
         }
@@ -83,11 +137,11 @@ final class Decompiler {
         yield methodName + "(" + operands.stream().map(this::valueText)
                 .collect(Collectors.joining(",")) + ")";
       }
-      case CoreOps.ConvOp conv -> "(" + conv.resultType().toString() + ")" + valueText(conv.operands().getFirst());
+      case CoreOps.ConvOp conv -> "(" + conv.resultType().toString() + ")" + valueText(conv.operands().getFirst(), precedence);
       case CoreOps.FieldAccessOp.FieldLoadOp load -> {
         List<Value> operands = load.operands();
         if (!operands.isEmpty()) {
-          yield valueText(operands.getFirst()) + "." + load.fieldDescriptor().name();
+          yield valueText(operands.getFirst(), precedence) + "." + load.fieldDescriptor().name();
         }
         try {
           Field field = load.fieldDescriptor().resolveToMember(MethodHandles.lookup());
@@ -106,30 +160,37 @@ final class Decompiler {
         // TODO: constructor
         yield op.toText() + ":" + op.getClass();
       }
-      case CoreOps.ArrayLengthOp _ -> valueText(op.operands().getFirst()) + ".length";
+      case CoreOps.ArrayLengthOp _ -> valueText(op.operands().getFirst(), precedence) + ".length";
       case CoreOps.ArrayAccessOp.ArrayLoadOp _ ->
-              valueText(op.operands().getFirst()) + "[" + valueText(op.operands().getLast()) + "]";
+              valueText(op.operands().getFirst(), precedence) + "[" + valueText(op.operands().getLast()) + "]";
       case CoreOps.BinaryTestOp _, CoreOps.BinaryOp _ ->
-              valueText(op.operands().get(0)) + " " + opSymbol(op) + " " + valueText(op.operands().get(1));
-      case CoreOps.UnaryOp _ -> opSymbol(op) + valueText(op.operands().getFirst());
+              valueText(op.operands().get(0), precedence) + " " + opSymbol(op) + " " + valueText(op.operands().get(1), precedence);
+      case CoreOps.UnaryOp _ -> opSymbol(op) + valueText(op.operands().getFirst(), precedence);
       case CoreOps.ReturnOp _ -> "return " + valueText(op.operands().getFirst());
       case CoreOps.YieldOp _ -> valueText(op.operands().getFirst());
       case CoreOps.ConstantOp c -> formatter.format(c.value());
-      case CoreOps.CastOp cast -> "(" + formatTypeName(cast.type()) + ")" + valueText(op.operands().getFirst());  
-      case CoreOps.InstanceOfOp instanceOf -> 
-              valueText(op.operands().getFirst()) +" instanceof " + formatTypeName(instanceOf.type());
+      case CoreOps.CastOp cast -> "(" + formatTypeName(cast.type()) + ")" + valueText(op.operands().getFirst(), precedence);
+      case CoreOps.InstanceOfOp instanceOf ->
+              valueText(op.operands().getFirst(), precedence) +" instanceof " + formatTypeName(instanceOf.type());
       case Interpreter.ThisOp _ -> "this";
       case ExtendedOps.JavaConditionalOp cand ->
-              cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp()))
+              cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp(), precedence))
                       .collect(Collectors.joining(" " + opSymbol(cand) + " "));
       case ExtendedOps.JavaConditionalExpressionOp ternary -> {
         List<Body> children = ternary.children();
-        yield opText(children.get(0).entryBlock().terminatingOp()) + " ? " +
-                opText(children.get(1).entryBlock().terminatingOp()) + " : " +
-                opText(children.get(2).entryBlock().terminatingOp());
+        yield opText(children.get(0).entryBlock().terminatingOp(), precedence) + " ? " +
+                opText(children.get(1).entryBlock().terminatingOp(), precedence) + " : " +
+                opText(children.get(2).entryBlock().terminatingOp(), precedence);
       }
       default -> op.toText() + ":" + op.getClass();
     };
+  }
+
+  private String opText(Op op, Precedence outerPrecedence) {
+    String rawText = opText(op);
+    Precedence innerPrecedence = Precedence.fromOp(op);
+    int cmp = innerPrecedence.compareTo(outerPrecedence);
+    return cmp < 0 || cmp == 0 && innerPrecedence == Precedence.DEREFERENCE ? rawText : "(" + rawText + ")";
   }
 
   private static String formatTypeName(TypeElement typeElement) {

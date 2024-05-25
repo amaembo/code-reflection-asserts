@@ -23,8 +23,8 @@ public final class InterpreterTest {
             """);
     doTest(() -> 3 * 2 / 4 >= 5, """
             3 * 2 -> 6
-            3 * 2 / 4 -> 1
-            3 * 2 / 4 >= 5 -> false
+            (3 * 2) / 4 -> 1
+            (3 * 2) / 4 >= 5 -> false
             """);
   }
   
@@ -36,8 +36,8 @@ public final class InterpreterTest {
             """);
     doTest(() -> -(2 + 2) == -4, """
             2 + 2 -> 4
-            -2 + 2 -> -4
-            -2 + 2 == -4 -> true
+            -(2 + 2) -> -4
+            -(2 + 2) == -4 -> true
             """);
   }
 
@@ -47,7 +47,7 @@ public final class InterpreterTest {
             255 & 291 -> 35
             255 & 291 | 12816 -> 12851
             20 ^ 10 -> 30
-            255 & 291 | 12816 == 20 ^ 10 -> false
+            (255 & 291 | 12816) == (20 ^ 10) -> false
             """);
   }
 
@@ -103,8 +103,8 @@ public final class InterpreterTest {
   public void testDivisionByZero() {
     doTest(() -> 3 * 2 / 0 >= 5, """
             3 * 2 -> 6
-            3 * 2 / 0 -> throws java.lang.ArithmeticException: / by zero
-            3 * 2 / 0 >= 5 -> throws java.lang.ArithmeticException: / by zero
+            (3 * 2) / 0 -> throws java.lang.ArithmeticException: / by zero
+            (3 * 2) / 0 >= 5 -> throws java.lang.ArithmeticException: / by zero
             """);
   }
 
@@ -207,16 +207,16 @@ public final class InterpreterTest {
     doTest(() -> ((String)obj).length() == 5, """
             obj -> "Hello"
             (String)obj -> "Hello"
-            (String)obj.length() -> 5
-            (String)obj.length() == 5 -> true
+            ((String)obj).length() -> 5
+            ((String)obj).length() == 5 -> true
             """);
     record LocalClass(int x) {}
     Object obj2 = new LocalClass(1);
     doTest(() -> ((LocalClass) obj2).x() == 1, """
             obj2 -> LocalClass[x=1]
             (LocalClass)obj2 -> LocalClass[x=1]
-            (LocalClass)obj2.x() -> 1
-            (LocalClass)obj2.x() == 1 -> true
+            ((LocalClass)obj2).x() -> 1
+            ((LocalClass)obj2).x() == 1 -> true
             """);
   }
   
@@ -229,24 +229,24 @@ public final class InterpreterTest {
             b -> 3
             a > b -> false
             a > b ? "xyz" : "ab" -> "ab"
-            a > b ? "xyz" : "ab".length() -> 2
-            a > b ? "xyz" : "ab".length() == 3 -> false
+            (a > b ? "xyz" : "ab").length() -> 2
+            (a > b ? "xyz" : "ab").length() == 3 -> false
             """);
     doTest(() -> (a < b ? "xyz" : "ab").length() == 3, """
             a -> 2
             b -> 3
             a < b -> true
             a < b ? "xyz" : "ab" -> "xyz"
-            a < b ? "xyz" : "ab".length() -> 3
-            a < b ? "xyz" : "ab".length() == 3 -> true
+            (a < b ? "xyz" : "ab").length() -> 3
+            (a < b ? "xyz" : "ab").length() == 3 -> true
             """);
     doTest(() -> (a < 1 / 0 ? "xyz" : "ab").length() == 3, """
             a -> 2
             1 / 0 -> throws java.lang.ArithmeticException: / by zero
             a < 1 / 0 -> throws java.lang.ArithmeticException: / by zero
             a < 1 / 0 ? "xyz" : "ab" -> throws java.lang.ArithmeticException: / by zero
-            a < 1 / 0 ? "xyz" : "ab".length() -> throws java.lang.ArithmeticException: / by zero
-            a < 1 / 0 ? "xyz" : "ab".length() == 3 -> throws java.lang.ArithmeticException: / by zero
+            (a < 1 / 0 ? "xyz" : "ab").length() -> throws java.lang.ArithmeticException: / by zero
+            (a < 1 / 0 ? "xyz" : "ab").length() == 3 -> throws java.lang.ArithmeticException: / by zero
             """);
   }
   
