@@ -1,16 +1,17 @@
 package one.util.asserts;
 
-import javax.lang.model.type.PrimitiveType;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Array;
 import java.lang.reflect.code.*;
-import java.lang.reflect.code.op.CoreOps;
-import java.lang.reflect.code.op.ExtendedOps;
+import java.lang.reflect.code.op.CoreOp;
+import java.lang.reflect.code.op.ExtendedOp;
+import java.lang.reflect.code.type.ArrayType;
 import java.lang.reflect.code.type.JavaType;
-import java.lang.reflect.code.type.TypeDefinition;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.IntBinaryOperator;
 import java.util.function.LongBinaryOperator;
@@ -33,14 +34,14 @@ final class Interpreter {
   static Node buildModel(Quoted quoted) {
     Op op = quoted.op();
     Map<Value, Object> capturedValues = quoted.capturedValues();
-    if (op instanceof CoreOps.LambdaOp lambdaOp) {
+    if (op instanceof CoreOp.LambdaOp lambdaOp) {
       Body body = lambdaOp.body();
       List<Block> blocks = body.blocks();
       if (blocks.size() != 1) {
         return new UnsupportedNode(op, List.of());
       }
       Block block = blocks.getFirst();
-      List<Op> list = block.children().stream().filter(CoreOps.ReturnOp.class::isInstance).toList();
+      List<Op> list = block.children().stream().filter(CoreOp.ReturnOp.class::isInstance).toList();
       if (list.size() != 1) {
         return new UnsupportedNode(op, List.of());
       }
@@ -79,9 +80,9 @@ final class Interpreter {
 
   Node buildModel(Op op) {
     Node res = switch (op) {
-      case CoreOps.ReturnOp _, CoreOps.YieldOp _ -> buildModel(op.operands().getFirst());
-      case CoreOps.ConstantOp c -> new ValueNode(c, c.value(), List.of());
-      case CoreOps.FieldAccessOp.FieldLoadOp load -> {
+      case CoreOp.ReturnOp _, CoreOp.YieldOp _ -> buildModel(op.operands().getFirst());
+      case CoreOp.ConstantOp c -> new ValueNode(c, c.value(), List.of());
+      case CoreOp.FieldAccessOp.FieldLoadOp load -> {
         VarHandle field;
         try {
           field = load.fieldDescriptor().resolveToHandle(lookup);
@@ -100,7 +101,7 @@ final class Interpreter {
         Object value = field.get();
         yield new ValueNode(load, value, List.of());
       }
-      case CoreOps.InvokeOp inv -> {
+      case CoreOp.InvokeOp inv -> {
         MethodHandle method;
         try {
           method = inv.invokeDescriptor().resolveToHandle(lookup);
@@ -126,7 +127,7 @@ final class Interpreter {
         }
         yield new ValueNode(inv, methodResult, operandNodes);
       }
-      case CoreOps.ArrayAccessOp.ArrayLoadOp _ -> {
+      case CoreOp.ArrayAccessOp.ArrayLoadOp _ -> {
         Node array = buildModel(op.operands().getFirst());
         if (!(array instanceof ValueNode arrayVal)) yield array.derivedFailure(op);
         Node index = buildModel(op.operands().getLast());
@@ -134,20 +135,20 @@ final class Interpreter {
         if (idx == null) yield index.derivedFailure(op, List.of(array, index));
         yield new ValueNode(op, Array.get(arrayVal.value(), idx), List.of(array, index));
       }
-      case CoreOps.ArrayLengthOp _ -> {
+      case CoreOp.ArrayLengthOp _ -> {
         Node array = buildModel(op.operands().getFirst());
         if (!(array instanceof ValueNode arrayVal)) yield array.derivedFailure(op);
         yield new ValueNode(op, Array.getLength(arrayVal.value()), List.of(array));
       }
-      case CoreOps.VarAccessOp.VarLoadOp load -> {
+      case CoreOp.VarAccessOp.VarLoadOp load -> {
         Value value = load.operands().getFirst();
         Object obj = capturedValues.get(value);
-        if (obj instanceof CoreOps.Var<?> var) {
+        if (obj instanceof CoreOp.Var<?> var) {
           yield new ValueNode(load, var.value(), List.of());
         }
         yield new UnsupportedNode(load, List.of());
       }
-      case CoreOps.BinaryOp mathOp -> {
+      case CoreOp.BinaryOp mathOp -> {
         Node left = buildModel(mathOp.operands().getFirst());
         Node right = buildModel(mathOp.operands().getLast());
         if (!(left instanceof ValueNode leftValNode)) yield left.derivedFailure(op);
@@ -156,27 +157,27 @@ final class Interpreter {
         Object leftVal = leftValNode.value();
         Object rightVal = rightValNode.value();
         yield switch (mathOp) {
-          case CoreOps.AddOp _ ->
+          case CoreOp.AddOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, Integer::sum, Long::sum, Float::sum, Double::sum), children);
-          case CoreOps.SubOp _ ->
+          case CoreOp.SubOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a - b, (a, b) -> a - b, (a, b) -> a - b, (a, b) -> a - b), children);
-          case CoreOps.MulOp _ ->
+          case CoreOp.MulOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a * b, (a, b) -> a * b, (a, b) -> a * b, (a, b) -> a * b), children);
-          case CoreOps.DivOp _ ->
+          case CoreOp.DivOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a / b, (a, b) -> a / b, (a, b) -> a / b, (a, b) -> a / b), children);
-          case CoreOps.ModOp _ ->
+          case CoreOp.ModOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a % b, (a, b) -> a % b, (a, b) -> a % b, (a, b) -> a % b), children);
-          case CoreOps.AndOp _ ->
+          case CoreOp.AndOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a & b, (a, b) -> a & b, null, null), children);
-          case CoreOps.OrOp _ ->
+          case CoreOp.OrOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a | b, (a, b) -> a | b, null, null), children);
-          case CoreOps.XorOp _ ->
+          case CoreOp.XorOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a ^ b, (a, b) -> a ^ b, null, null), children);
           // TODO: shift ops
           default -> new UnsupportedNode(op, children);
         };
       }
-      case CoreOps.BinaryTestOp testOp -> {
+      case CoreOp.BinaryTestOp testOp -> {
         Node left = buildModel(testOp.operands().getFirst());
         Node right = buildModel(testOp.operands().getLast());
         if (!(left instanceof ValueNode leftValNode)) yield left.derivedFailure(op);
@@ -185,43 +186,64 @@ final class Interpreter {
         Object leftVal = leftValNode.value();
         Object rightVal = rightValNode.value();
         yield switch (testOp) {
-          case CoreOps.EqOp _ -> new ValueNode(testOp, leftVal.equals(rightVal), children);
-          case CoreOps.NeqOp _ -> new ValueNode(testOp, !leftVal.equals(rightVal), children);
-          case CoreOps.LtOp _ ->
+          case CoreOp.EqOp _ -> new ValueNode(testOp, leftVal.equals(rightVal), children);
+          case CoreOp.NeqOp _ -> new ValueNode(testOp, !leftVal.equals(rightVal), children);
+          case CoreOp.LtOp _ ->
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a < b, (a, b) -> a < b), children);
-          case CoreOps.LeOp _ ->
+          case CoreOp.LeOp _ ->
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a <= b, (a, b) -> a <= b), children);
-          case CoreOps.GtOp _ ->
+          case CoreOp.GtOp _ ->
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a > b, (a, b) -> a > b), children);
-          case CoreOps.GeOp _ ->
+          case CoreOp.GeOp _ ->
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a >= b, (a, b) -> a >= b), children);
           default -> new UnsupportedNode(op, children);
         };
       }
-      case CoreOps.NewOp newOp -> {
-        TypeDefinition typeDefinition = newOp.resultType().toTypeDefinition();
-        String identifier = typeDefinition.identifier();
-        if (identifier.startsWith("[")) {
+      case CoreOp.NewOp newOp -> {
+        TypeElement resultType = newOp.resultType();
+        if (resultType instanceof ArrayType arrayType) {
           List<Node> childNodes = new ArrayList<>();
           IntStream.Builder dims = IntStream.builder();
           for (Value value : newOp.operands()) {
+            // TODO: initialized arrays
             Node node = buildModel(value);
             childNodes.add(node);
             Integer dim = intValue(node);
             if (dim == null) yield node.derivedFailure(newOp, childNodes);
             dims.add(dim);
           }
-          TypeDefinition first = typeDefinition.arguments().getFirst();
-          Class<?> className = Class.forPrimitiveName(first.toString());
-          if (className != null) {
-            yield new ValueNode(newOp, Array.newInstance(className, dims.build().toArray()), childNodes);
+          JavaType componentType = Util.deepComponentType(arrayType);
+          Class<?> cls;
+          try {
+            cls = componentType.toNominalDescriptor().resolveConstantDesc(lookup);
+          } catch (ReflectiveOperationException e) {
+            yield new ExceptionNode(newOp, e, childNodes);
           }
-          // TODO: non-primitive arrays
+          yield new ValueNode(newOp, Array.newInstance(cls, dims.build().toArray()), childNodes);
         }
+        List<Value> operands = newOp.operands();
+        List<Node> operandNodes = new ArrayList<>();
+        List<Object> arguments = new ArrayList<>();
+        for (Value operand : operands) {
+          Node node = buildModel(operand);
+          operandNodes.add(node);
+          if (!(node instanceof ValueNode valNode)) {
+            yield node.derivedFailure(op, operandNodes);
+          }
+          arguments.add(valNode.value());
+        }
+//        TypeDefinition type = newOp.type().toTypeDefinition();
+//        Class<?> aClass;
+//        try {
+//          aClass = lookup.findClass(type.identifier());
+//        } catch (ClassNotFoundException | IllegalAccessException e) {
+//          yield new ExceptionNode(newOp, e, operandNodes);
+//        }
+        //newOp.constructorType().parameterTypes()
         // TODO
-        yield new UnsupportedNode(op, List.of());
+        yield new UnsupportedNode(op, operandNodes);
       }
-      case CoreOps.NotOp n -> {
+      case CoreOp.NotOp n -> {
         Node operand = buildModel(n.operands().getFirst());
         if (operand instanceof ValueNode valNode && valNode.value() instanceof Boolean val) {
           yield new ValueNode(op, !val, List.of(operand));
@@ -229,7 +251,7 @@ final class Interpreter {
           yield operand.derivedFailure(n);
         }
       }
-      case CoreOps.NegOp n -> {
+      case CoreOp.NegOp n -> {
         Node operand = buildModel(n.operands().getFirst());
         if (!(operand instanceof ValueNode valNode)) yield operand.derivedFailure(n);
         yield switch (valNode.value()) {
@@ -240,7 +262,7 @@ final class Interpreter {
           default -> operand.derivedFailure(n);
         };
       }
-      case CoreOps.ConvOp conv -> {
+      case CoreOp.ConvOp conv -> {
         Node operand = buildModel(conv.operands().getFirst());
         if (!(operand instanceof ValueNode valNode)) {
           yield operand.derivedFailure(conv);
@@ -248,7 +270,7 @@ final class Interpreter {
         Object result = convert(conv.resultType(), valNode.value());
         yield fromValue(conv, result, List.of(operand));
       }
-      case ExtendedOps.JavaConditionalExpressionOp ternary -> {
+      case ExtendedOp.JavaConditionalExpressionOp ternary -> {
         List<Body> children = ternary.children();
         if (children.size() != 3) {
           yield new UnsupportedNode(ternary, List.of());
@@ -263,8 +285,8 @@ final class Interpreter {
         }
         yield new ValueNode(ternary, thenValNode.value(), List.of(condition, branch));
       }
-      case ExtendedOps.JavaConditionalOp cond -> {
-        boolean isAnd = op instanceof ExtendedOps.JavaConditionalAndOp;
+      case ExtendedOp.JavaConditionalOp cond -> {
+        boolean isAnd = op instanceof ExtendedOp.JavaConditionalAndOp;
         boolean value = isAnd;
         List<Node> nodes = new ArrayList<>();
         for (Body child : cond.children()) {
@@ -281,30 +303,34 @@ final class Interpreter {
         }
         yield new ValueNode(cond, value, nodes);
       }
-      case CoreOps.InstanceOfOp instanceOf -> {
+      case CoreOp.InstanceOfOp instanceOf -> {
         Node operand = buildModel(instanceOf.operands().getFirst());
         if (!(operand instanceof ValueNode valNode)) {
           yield operand.derivedFailure(instanceOf);
         }
-        TypeDefinition type = instanceOf.type().toTypeDefinition();
+        if (!(instanceOf.type() instanceof JavaType javaType)) {
+          yield new UnsupportedNode(instanceOf, List.of(operand));
+        }
         Class<?> aClass;
         try {
-          aClass = lookup.findClass(type.identifier());
-        } catch (ClassNotFoundException | IllegalAccessException e) {
+          aClass = javaType.toNominalDescriptor().resolveConstantDesc(lookup);
+        } catch (ReflectiveOperationException e) {
           yield new ExceptionNode(instanceOf, e, List.of(operand));
         }
         yield new ValueNode(instanceOf, aClass.isInstance(valNode.value()), List.of(operand));
       }
-      case CoreOps.CastOp castOp -> {
+      case CoreOp.CastOp castOp -> {
         Node operand = buildModel(castOp.operands().getFirst());
         if (!(operand instanceof ValueNode valNode)) {
           yield operand.derivedFailure(castOp);
         }
-        TypeDefinition type = castOp.type().toTypeDefinition();
+        if (!(castOp.type() instanceof JavaType javaType)) {
+          yield new UnsupportedNode(castOp, List.of(operand));
+        }
         Class<?> aClass;
         try {
-          aClass = lookup.findClass(type.identifier());
-        } catch (ClassNotFoundException | IllegalAccessException e) {
+          aClass = javaType.toNominalDescriptor().resolveConstantDesc(lookup);
+        } catch (ReflectiveOperationException e) {
           yield new ExceptionNode(castOp, e, List.of(operand));
         }
         yield new ValueNode(castOp, aClass.cast(valNode.value()), List.of(operand));

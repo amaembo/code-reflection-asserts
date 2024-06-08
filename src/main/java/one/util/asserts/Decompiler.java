@@ -1,13 +1,15 @@
 package one.util.asserts;
 
+import java.lang.constant.ClassDesc;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.code.*;
-import java.lang.reflect.code.op.CoreOps;
-import java.lang.reflect.code.op.ExtendedOps;
-import java.lang.reflect.code.op.OpDeclaration;
-import java.lang.reflect.code.type.TypeDefinition;
+import java.lang.reflect.code.op.CoreOp;
+import java.lang.reflect.code.op.ExtendedOp;
+import java.lang.reflect.code.op.OpFactory;
+import java.lang.reflect.code.type.ArrayType;
+import java.lang.reflect.code.type.ClassType;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,27 +41,27 @@ final class Decompiler {
 
     static Precedence fromOp(Op op) {
       return switch (op) {
-        case ExtendedOps.JavaConditionalExpressionOp _ -> TERNARY;
-        case ExtendedOps.JavaConditionalAndOp _ -> LOGICAL_AND;
-        case ExtendedOps.JavaConditionalOrOp _ -> LOGICAL_OR;
-        case CoreOps.AddOp _, CoreOps.SubOp _ -> ADDITIVE;
-        case CoreOps.MulOp _, CoreOps.DivOp _, CoreOps.ModOp _ -> MULTIPLICATIVE;
-        case CoreOps.AshrOp _, CoreOps.LshrOp _, CoreOps.LshlOp _ -> SHIFT;
-        case CoreOps.EqOp _, CoreOps.NeqOp _ -> EQUALITY;
-        case CoreOps.BinaryTestOp _, CoreOps.InstanceOfOp _ -> RELATIONAL;
-        case CoreOps.AndOp _ -> BITWISE_AND;
-        case CoreOps.OrOp _ -> BITWISE_OR;
-        case CoreOps.XorOp _ -> BITWISE_XOR;
-        case CoreOps.UnaryOp _, CoreOps.ConvOp _, CoreOps.CastOp _ -> UNARY;
-        case CoreOps.ArrayAccessOp _, CoreOps.InvokeOp _, CoreOps.FieldAccessOp _,
-             CoreOps.ArrayLengthOp _ -> DEREFERENCE;
+        case ExtendedOp.JavaConditionalExpressionOp _ -> TERNARY;
+        case ExtendedOp.JavaConditionalAndOp _ -> LOGICAL_AND;
+        case ExtendedOp.JavaConditionalOrOp _ -> LOGICAL_OR;
+        case CoreOp.AddOp _, CoreOp.SubOp _ -> ADDITIVE;
+        case CoreOp.MulOp _, CoreOp.DivOp _, CoreOp.ModOp _ -> MULTIPLICATIVE;
+        case CoreOp.AshrOp _, CoreOp.LshrOp _, CoreOp.LshlOp _ -> SHIFT;
+        case CoreOp.EqOp _, CoreOp.NeqOp _ -> EQUALITY;
+        case CoreOp.BinaryTestOp _, CoreOp.InstanceOfOp _ -> RELATIONAL;
+        case CoreOp.AndOp _ -> BITWISE_AND;
+        case CoreOp.OrOp _ -> BITWISE_OR;
+        case CoreOp.XorOp _ -> BITWISE_XOR;
+        case CoreOp.UnaryOp _, CoreOp.ConvOp _, CoreOp.CastOp _ -> UNARY;
+        case CoreOp.ArrayAccessOp _, CoreOp.InvokeOp _, CoreOp.FieldAccessOp _,
+             CoreOp.ArrayLengthOp _ -> DEREFERENCE;
         default -> LITERAL;
       };
     }
   }
-  
+
   static final Decompiler DEFAULT = new Decompiler(DefaultValueFormatter.DEFAULT);
-  
+
   private static final Map<String, String> ops =
           Map.ofEntries(
                   Map.entry("eq", "=="),
@@ -84,7 +86,7 @@ final class Decompiler {
                   Map.entry("java.cand", "&&"),
                   Map.entry("java.cor", "||")
           );
-  
+
   private final ValueFormatter formatter;
 
   private Decompiler(ValueFormatter formatter) {
@@ -118,9 +120,9 @@ final class Decompiler {
   String opText(Op op) {
     Precedence precedence = Precedence.fromOp(op);
     return switch (op) {
-      case CoreOps.VarOp varOp -> varOp.varName();
-      case CoreOps.VarAccessOp.VarLoadOp load -> valueText(load.operands().getFirst());
-      case CoreOps.InvokeOp inv -> {
+      case CoreOp.VarOp varOp -> varOp.varName();
+      case CoreOp.VarAccessOp.VarLoadOp load -> valueText(load.operands().getFirst());
+      case CoreOp.InvokeOp inv -> {
         List<Value> operands = inv.operands();
         if (inv.hasReceiver()) {
           yield valueText(operands.getFirst(), precedence) + "." + inv.invokeDescriptor().name() + "("
@@ -137,8 +139,8 @@ final class Decompiler {
         yield methodName + "(" + operands.stream().map(this::valueText)
                 .collect(Collectors.joining(",")) + ")";
       }
-      case CoreOps.ConvOp conv -> "(" + conv.resultType().toString() + ")" + valueText(conv.operands().getFirst(), precedence);
-      case CoreOps.FieldAccessOp.FieldLoadOp load -> {
+      case CoreOp.ConvOp conv -> "(" + conv.resultType().toString() + ")" + valueText(conv.operands().getFirst(), precedence);
+      case CoreOp.FieldAccessOp.FieldLoadOp load -> {
         List<Value> operands = load.operands();
         if (!operands.isEmpty()) {
           yield valueText(operands.getFirst(), precedence) + "." + load.fieldDescriptor().name();
@@ -150,33 +152,34 @@ final class Decompiler {
           yield formatTypeName(load.fieldDescriptor().refType()) + "." + load.fieldDescriptor().name();
         }
       }
-      case CoreOps.NewOp newOp -> {
-        TypeDefinition typeDefinition = newOp.resultType().toTypeDefinition();
-        String identifier = typeDefinition.identifier();
-        if (identifier.startsWith("[")) {
-          yield "new " + typeDefinition.arguments().getFirst().toString() +
+      case CoreOp.NewOp newOp -> {
+        TypeElement resultType = newOp.resultType();
+        // TODO: initialized arrays
+        if (resultType instanceof ArrayType arrayType) {
+          yield "new " + formatTypeName(Util.deepComponentType(arrayType)) +
                   newOp.operands().stream().map(v -> "[" + valueText(v) + "]").collect(Collectors.joining());
         }
-        // TODO: constructor
-        yield op.toText() + ":" + op.getClass();
+        String operands = "(" + newOp.operands().stream().map(this::valueText)
+                .collect(Collectors.joining(",")) + ")";
+        yield "new " + formatTypeName(newOp.type()) + operands;
       }
-      case CoreOps.ArrayLengthOp _ -> valueText(op.operands().getFirst(), precedence) + ".length";
-      case CoreOps.ArrayAccessOp.ArrayLoadOp _ ->
+      case CoreOp.ArrayLengthOp _ -> valueText(op.operands().getFirst(), precedence) + ".length";
+      case CoreOp.ArrayAccessOp.ArrayLoadOp _ ->
               valueText(op.operands().getFirst(), precedence) + "[" + valueText(op.operands().getLast()) + "]";
-      case CoreOps.BinaryTestOp _, CoreOps.BinaryOp _ ->
+      case CoreOp.BinaryTestOp _, CoreOp.BinaryOp _ ->
               valueText(op.operands().get(0), precedence) + " " + opSymbol(op) + " " + valueText(op.operands().get(1), precedence);
-      case CoreOps.UnaryOp _ -> opSymbol(op) + valueText(op.operands().getFirst(), precedence);
-      case CoreOps.ReturnOp _ -> "return " + valueText(op.operands().getFirst());
-      case CoreOps.YieldOp _ -> valueText(op.operands().getFirst());
-      case CoreOps.ConstantOp c -> formatter.format(c.value());
-      case CoreOps.CastOp cast -> "(" + formatTypeName(cast.type()) + ")" + valueText(op.operands().getFirst(), precedence);
-      case CoreOps.InstanceOfOp instanceOf ->
+      case CoreOp.UnaryOp _ -> opSymbol(op) + valueText(op.operands().getFirst(), precedence);
+      case CoreOp.ReturnOp _ -> "return " + valueText(op.operands().getFirst());
+      case CoreOp.YieldOp _ -> valueText(op.operands().getFirst());
+      case CoreOp.ConstantOp c -> formatter.format(c.value());
+      case CoreOp.CastOp cast -> "(" + formatTypeName(cast.type()) + ")" + valueText(op.operands().getFirst(), precedence);
+      case CoreOp.InstanceOfOp instanceOf ->
               valueText(op.operands().getFirst(), precedence) +" instanceof " + formatTypeName(instanceOf.type());
       case Interpreter.ThisOp _ -> "this";
-      case ExtendedOps.JavaConditionalOp cand ->
+      case ExtendedOp.JavaConditionalOp cand ->
               cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp(), precedence))
                       .collect(Collectors.joining(" " + opSymbol(cand) + " "));
-      case ExtendedOps.JavaConditionalExpressionOp ternary -> {
+      case ExtendedOp.JavaConditionalExpressionOp ternary -> {
         List<Body> children = ternary.children();
         yield opText(children.get(0).entryBlock().terminatingOp(), precedence) + " ? " +
                 opText(children.get(1).entryBlock().terminatingOp(), precedence) + " : " +
@@ -194,13 +197,16 @@ final class Decompiler {
   }
 
   private static String formatTypeName(TypeElement typeElement) {
-    TypeDefinition typeDefinition = typeElement.toTypeDefinition();
-    String identifier = typeDefinition.identifier();
-    try {
-      return MethodHandles.lookup().findClass(identifier).getSimpleName();
-    } catch (ClassNotFoundException | IllegalAccessException _) {
-      
+    if (typeElement instanceof ClassType classType) {
+      ClassDesc descriptor = classType.toNominalDescriptor();
+      try {
+        return descriptor.resolveConstantDesc(MethodHandles.lookup()).getSimpleName();
+      } catch (ReflectiveOperationException _) {
+      }
+      return descriptor.displayName();
     }
+    TypeElement.ExternalizedTypeElement typeDefinition = typeElement.externalize();
+    String identifier = typeDefinition.identifier();
     int dotPos = identifier.lastIndexOf('.');
     if (dotPos > -1) {
       return identifier.substring(dotPos + 1);
@@ -209,7 +215,7 @@ final class Decompiler {
   }
 
   private static String opSymbol(Op op) {
-    String name = op.getClass().getAnnotation(OpDeclaration.class).value();
+    String name = op.getClass().getAnnotation(OpFactory.OpDeclaration.class).value();
     return ops.getOrDefault(name, name);
   }
 }

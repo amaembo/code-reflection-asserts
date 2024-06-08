@@ -256,8 +256,8 @@ public final class InterpreterTest {
       int x = 10;
       return x > 2;
     }, """
-            Unsupported node: x (class java.lang.reflect.code.op.CoreOps$VarAccessOp$VarLoadOp)
-            Unsupported node: x > 2 (class java.lang.reflect.code.op.CoreOps$GtOp)
+            Unsupported node: x (class java.lang.reflect.code.op.CoreOp$VarAccessOp$VarLoadOp)
+            Unsupported node: x > 2 (class java.lang.reflect.code.op.CoreOp$GtOp)
             """);
   }
 

@@ -1,7 +1,7 @@
 package one.util.asserts;
 
 import java.lang.reflect.code.Op;
-import java.lang.reflect.code.op.CoreOps;
+import java.lang.reflect.code.op.CoreOp;
 import java.util.List;
 
 sealed interface Node {
@@ -22,8 +22,8 @@ sealed interface Node {
 
   record ValueNode(Op op, Object value, List<Node> children) implements Node {
     boolean isTrivial() {
-      return children.isEmpty() && op instanceof CoreOps.ConstantOp ||
-              op instanceof CoreOps.NegOp && children.size() == 1 &&
+      return children.isEmpty() && op instanceof CoreOp.ConstantOp ||
+              op instanceof CoreOp.NegOp && children.size() == 1 &&
                       children.getFirst() instanceof ValueNode child &&
                       child.isTrivial();
     }
