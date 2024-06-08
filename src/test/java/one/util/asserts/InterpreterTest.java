@@ -251,6 +251,16 @@ public final class InterpreterTest {
   }
   
   @Test
+  public void testNewExpression() {
+    doTest(() -> new String(new char[5]).hashCode() == 10, """
+            new char[5] -> ['\\u0000', '\\u0000', '\\u0000', '\\u0000', '\\u0000']
+            new String(new char[5]) -> "\\u0000\\u0000\\u0000\\u0000\\u0000"
+            new String(new char[5]).hashCode() -> 0
+            new String(new char[5]).hashCode() == 10 -> false
+            """);
+  }
+  
+  @Test
   public void testUnsupported() {
     doTest(() -> {
       int x = 10;

@@ -4,6 +4,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.code.*;
 import java.lang.reflect.code.op.CoreOp;
 import java.lang.reflect.code.op.ExtendedOp;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.IntBinaryOperator;
 import java.util.function.LongBinaryOperator;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static one.util.asserts.Node.*;
@@ -212,11 +214,10 @@ final class Interpreter {
             if (dim == null) yield node.derivedFailure(newOp, childNodes);
             dims.add(dim);
           }
-          JavaType componentType = Util.deepComponentType(arrayType);
           Class<?> cls;
           try {
-            cls = componentType.toNominalDescriptor().resolveConstantDesc(lookup);
-          } catch (ReflectiveOperationException e) {
+            cls = toClass(Util.deepComponentType(arrayType));
+          } catch (RuntimeException e) {
             yield new ExceptionNode(newOp, e, childNodes);
           }
           yield new ValueNode(newOp, Array.newInstance(cls, dims.build().toArray()), childNodes);
@@ -232,16 +233,16 @@ final class Interpreter {
           }
           arguments.add(valNode.value());
         }
-//        TypeDefinition type = newOp.type().toTypeDefinition();
-//        Class<?> aClass;
-//        try {
-//          aClass = lookup.findClass(type.identifier());
-//        } catch (ClassNotFoundException | IllegalAccessException e) {
-//          yield new ExceptionNode(newOp, e, operandNodes);
-//        }
-        //newOp.constructorType().parameterTypes()
-        // TODO
-        yield new UnsupportedNode(op, operandNodes);
+        try {
+          Class<?>[] argTypes = newOp.constructorType().parameterTypes().stream()
+                  .map(this::toClass).toArray(Class[]::new);
+          Class<?> objType = toClass(newOp.type());
+          Object result = objType.getConstructor(argTypes).newInstance(arguments.toArray());
+          yield new ValueNode(newOp, result, operandNodes);
+        } catch (RuntimeException | NoSuchMethodException | InstantiationException | IllegalAccessException |
+                 InvocationTargetException e) {
+          yield new ExceptionNode(newOp, e, operandNodes);
+        }
       }
       case CoreOp.NotOp n -> {
         Node operand = buildModel(n.operands().getFirst());
@@ -342,6 +343,18 @@ final class Interpreter {
       default -> new UnsupportedNode(op, List.of());
     };
     return res;
+  }
+  
+  private Class<?> toClass(TypeElement typeElement) {
+    if (!(typeElement instanceof JavaType javaType)) {
+      throw new UnsupportedOperationException("Not a Java type: " + typeElement);
+    }
+    try {
+      return javaType.toNominalDescriptor().resolveConstantDesc(lookup);
+    }
+    catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private Object convert(TypeElement typeElement, Object value) {
