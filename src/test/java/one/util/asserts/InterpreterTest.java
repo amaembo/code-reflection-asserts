@@ -261,6 +261,15 @@ public final class InterpreterTest {
   }
   
   @Test
+  public void testNewObjectArray() {
+    doTest(() -> new String[5].length == 5, """
+            new String[5] -> [null, null, null, null, null]
+            new String[5].length -> 5
+            new String[5].length == 5 -> true
+            """);
+  }
+  
+  @Test
   public void testUnsupported() {
     doTest(() -> {
       int x = 10;
