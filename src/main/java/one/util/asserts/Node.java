@@ -27,8 +27,8 @@ sealed interface Node {
                       children.getFirst() instanceof ValueNode child &&
                       child.isTrivial()) ||
               (op instanceof CoreOp.ConvOp && children.size() == 1 &&
-                      children.getFirst() instanceof ValueNode child &&
-                      child.children.isEmpty() && child.op instanceof CoreOp.ConstantOp);
+                      children.getFirst() instanceof ValueNode converted &&
+                      converted.children.isEmpty() && converted.op instanceof CoreOp.ConstantOp);
     }
   }
 
