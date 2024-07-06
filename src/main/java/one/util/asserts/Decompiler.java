@@ -176,6 +176,13 @@ final class Decompiler {
       case CoreOp.InstanceOfOp instanceOf ->
               valueText(op.operands().getFirst(), precedence) +" instanceof " + formatTypeName(instanceOf.type());
       case Interpreter.ThisOp _ -> "this";
+      case CoreOp.QuotedOp quoted -> {
+        List<Body> bodies = quoted.bodies();
+        if (bodies.size() == 1) {
+          Body body = bodies.getFirst();
+        }
+        yield op.toText() + ":" + op.getClass();
+      }
       case ExtendedOp.JavaConditionalOp cand ->
               cand.children().stream().map(body -> opText(body.entryBlock().terminatingOp(), precedence))
                       .collect(Collectors.joining(" " + opSymbol(cand) + " "));
