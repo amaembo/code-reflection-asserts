@@ -40,6 +40,27 @@ public final class InterpreterTest {
             -(2 + 2) == -4 -> true
             """);
   }
+  
+  @Test
+  public void testShift() {
+    int x = 123;
+    doTest(() -> x >> 2 == 61, """
+            x -> 123
+            x >> 2 -> 30
+            x >> 2 == 61 -> false
+            """);
+    doTest(() -> x >> 32 == 61, """
+            x -> 123
+            x >> 32 -> 123
+            x >> 32 == 61 -> false
+            """);
+    doTest(() -> (long)x >> 32 == 61, """
+            x -> 123
+            (long)x -> 123L
+            (long)x >> 32 -> 0L
+            (long)x >> 32 == (long)61 -> false
+            """);
+  }
 
   @Test
   public void testBitwiseIntMath() {
@@ -122,7 +143,10 @@ public final class InterpreterTest {
   
   @Test
   public void testPrimitiveWidening() {
-    doTest(() -> 2.0 + 2 == 4, "(double)2 -> 2.0\n2.0 + (double)2 -> 4.0\n(double)4 -> 4.0\n2.0 + (double)2 == (double)4 -> true\n");
+    doTest(() -> 2.0 + 2 == 4, """
+            2.0 + (double)2 -> 4.0
+            2.0 + (double)2 == (double)4 -> true
+            """);
   }
 
   @Test

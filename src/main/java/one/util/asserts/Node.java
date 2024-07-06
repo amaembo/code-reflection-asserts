@@ -23,9 +23,12 @@ sealed interface Node {
   record ValueNode(Op op, Object value, List<Node> children) implements Node {
     boolean isTrivial() {
       return children.isEmpty() && op instanceof CoreOp.ConstantOp ||
-              op instanceof CoreOp.NegOp && children.size() == 1 &&
+              (op instanceof CoreOp.NegOp && children.size() == 1 &&
                       children.getFirst() instanceof ValueNode child &&
-                      child.isTrivial();
+                      child.isTrivial()) ||
+              (op instanceof CoreOp.ConvOp && children.size() == 1 &&
+                      children.getFirst() instanceof ValueNode child &&
+                      child.children.isEmpty() && child.op instanceof CoreOp.ConstantOp);
     }
   }
 

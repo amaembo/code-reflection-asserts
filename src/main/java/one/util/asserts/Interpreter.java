@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.IntBinaryOperator;
 import java.util.function.LongBinaryOperator;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static one.util.asserts.Node.*;
@@ -81,7 +80,12 @@ final class Interpreter {
   }
 
   Node buildModel(Op op) {
-    Node res = switch (op) {
+    // TODO: initialized arrays
+    // TODO: new instance
+    // TODO: switch expression
+    // TODO: lambda?
+    // TODO: method ref?
+    return switch (op) {
       case CoreOp.ReturnOp _, CoreOp.YieldOp _ -> buildModel(op.operands().getFirst());
       case CoreOp.ConstantOp c -> new ValueNode(c, c.value(), List.of());
       case CoreOp.FieldAccessOp.FieldLoadOp load -> {
@@ -175,8 +179,39 @@ final class Interpreter {
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a | b, (a, b) -> a | b, null, null), children);
           case CoreOp.XorOp _ ->
                   fromValue(mathOp, doMath(leftVal, rightVal, (a, b) -> a ^ b, (a, b) -> a ^ b, null, null), children);
-          // TODO: shift ops
-          default -> new UnsupportedNode(op, children);
+          case CoreOp.AshrOp _ -> {
+            Object result = null;
+            if (rightVal instanceof Number amount) {
+              if (leftVal instanceof Integer operand) {
+                result = operand >> amount.intValue();
+              } else if (leftVal instanceof Long operand) {
+                result = operand >> amount.longValue();
+              }
+            }
+            yield fromValue(mathOp, result, children);
+          }
+          case CoreOp.LshrOp _ -> {
+            Object result = null;
+            if (rightVal instanceof Number amount) {
+              if (leftVal instanceof Integer operand) {
+                result = operand >>> amount.intValue();
+              } else if (leftVal instanceof Long operand) {
+                result = operand >>> amount.longValue();
+              }
+            }
+            yield fromValue(mathOp, result, children);
+          }
+          case CoreOp.LshlOp _ -> {
+            Object result = null;
+            if (rightVal instanceof Number amount) {
+              if (leftVal instanceof Integer operand) {
+                result = operand << amount.intValue();
+              } else if (leftVal instanceof Long operand) {
+                result = operand << amount.longValue();
+              }
+            }
+            yield fromValue(mathOp, result, children);
+          }
         };
       }
       case CoreOp.BinaryTestOp testOp -> {
@@ -198,7 +233,6 @@ final class Interpreter {
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a > b, (a, b) -> a > b), children);
           case CoreOp.GeOp _ ->
                   fromValue(testOp, compTest(leftVal, rightVal, (a, b) -> a >= b, (a, b) -> a >= b), children);
-          default -> new UnsupportedNode(op, children);
         };
       }
       case CoreOp.NewOp newOp -> {
@@ -342,7 +376,6 @@ final class Interpreter {
       // TODO: method ref?
       default -> new UnsupportedNode(op, List.of());
     };
-    return res;
   }
   
   private Class<?> toClass(TypeElement typeElement) {
