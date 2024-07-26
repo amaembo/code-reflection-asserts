@@ -22,19 +22,7 @@ final class Util {
   }
 
   static CoreOp.LambdaOp extractLambda(CoreOp.QuotedOp quoted) {
-    List<Body> bodies = quoted.bodies();
-    if (bodies.size() == 1) {
-      List<Block> blocks = bodies.getFirst().blocks();
-      if (blocks.size() == 1) {
-        List<Op> ops = blocks.getFirst().ops();
-        if (!ops.isEmpty()) {
-          if (ops.getFirst() instanceof CoreOp.LambdaOp lambdaOp) {
-            return lambdaOp;
-          }
-        }
-      }
-    }
-    return null;
+    return quoted.quotedOp() instanceof CoreOp.LambdaOp lambdaOp ? lambdaOp : null;
   }
   
   static CoreOp.InvokeOp extractMethodReference(CoreOp.QuotedOp quoted) {
