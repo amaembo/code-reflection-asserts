@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.code.Quoted;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -290,6 +291,20 @@ public final class InterpreterTest {
             new String[5] -> [null, null, null, null, null]
             new String[5].length -> 5
             new String[5].length == 5 -> true
+            """);
+  }
+  
+  @Test
+  public void testMethodRef() {
+    doTest(() -> Optional.of("").filter(String::isEmpty).isPresent(), """
+            Optional.of("") -> Optional[]
+            Optional.of("").filter(String::isEmpty) -> Optional[]
+            Optional.of("").filter(String::isEmpty).isPresent() -> true
+            """);
+    doTest(() -> Optional.of("xyz").filter(String::isEmpty).isPresent(), """
+            Optional.of("xyz") -> Optional[xyz]
+            Optional.of("xyz").filter(String::isEmpty) -> Optional.empty
+            Optional.of("xyz").filter(String::isEmpty).isPresent() -> false
             """);
   }
   

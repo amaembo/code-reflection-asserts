@@ -3,25 +3,27 @@ package one.util.asserts;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.lang.reflect.Array;
-import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.*;
 import java.lang.reflect.code.*;
 import java.lang.reflect.code.op.CoreOp;
 import java.lang.reflect.code.op.ExtendedOp;
 import java.lang.reflect.code.type.ArrayType;
 import java.lang.reflect.code.type.JavaType;
+import java.lang.reflect.code.type.MethodRef;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.IntBinaryOperator;
 import java.util.function.LongBinaryOperator;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static one.util.asserts.Node.*;
 
 /**
- * Expression interpreter 
+ * Expression interpreter
  */
 final class Interpreter {
   private final Map<Value, Object> capturedValues;
@@ -74,7 +76,7 @@ final class Interpreter {
         if (capturedValues.containsKey(parameter)) {
           yield new ValueNode(new ThisOp(), capturedValues.get(parameter), List.of());
         }
-        throw new UnsupportedOperationException(value + ":" + value.getClass());  
+        throw new UnsupportedOperationException(value + ":" + value.getClass());
       }
     };
   }
@@ -106,6 +108,40 @@ final class Interpreter {
         }
         Object value = field.get();
         yield new ValueNode(load, value, List.of());
+      }
+      case CoreOp.QuotedOp quoted -> {
+        // TODO: lambdas; instance-bound MR; static method MR; constructor MR
+        CoreOp.LambdaOp lambdaOp = Util.extractLambda(quoted);
+        if (lambdaOp != null) {
+          CoreOp.InvokeOp invokeOp = lambdaOp.methodReference().orElse(null);
+          if (invokeOp != null && lambdaOp.functionalInterface() instanceof JavaType javaType) {
+            try {
+              Executable executable = invokeOp.invokeDescriptor().resolveToMember(lookup);
+              if (!(executable instanceof Method target)) {
+                throw new ReflectiveOperationException("Not method: " + executable);
+              }
+              Class<?> aClass = javaType.toNominalDescriptor().resolveConstantDesc(lookup);
+              Object methodRefProxy = Proxy.newProxyInstance(aClass.getClassLoader(), new Class[]{aClass}, (proxy, method, args) -> {
+                if (Modifier.isAbstract(method.getModifiers())) {
+                  return target.invoke(args[0], Arrays.copyOfRange(args, 1, args.length));
+                }
+                if (method.getDeclaringClass() == Object.class) {
+                  return switch (method.getName()) {
+                    case "equals" -> proxy == args[0];
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "toString" -> "lambda_" + Integer.toHexString(System.identityHashCode(proxy));
+                    default -> throw new AssertionError();
+                  };
+                }
+                return method.invoke(proxy, args);
+              });
+              yield new ValueNode(quoted, methodRefProxy, List.of());
+            } catch (ReflectiveOperationException e) {
+              yield new ExceptionNode(quoted, e, List.of());
+            }
+          }
+        }
+        yield new UnsupportedNode(quoted, List.of());
       }
       case CoreOp.InvokeOp inv -> {
         MethodHandle method;
@@ -377,15 +413,14 @@ final class Interpreter {
       default -> new UnsupportedNode(op, List.of());
     };
   }
-  
+
   private Class<?> toClass(TypeElement typeElement) {
     if (!(typeElement instanceof JavaType javaType)) {
       throw new UnsupportedOperationException("Not a Java type: " + typeElement);
     }
     try {
       return javaType.toNominalDescriptor().resolveConstantDesc(lookup);
-    }
-    catch (ReflectiveOperationException e) {
+    } catch (ReflectiveOperationException e) {
       throw new RuntimeException(e);
     }
   }
@@ -486,8 +521,7 @@ final class Interpreter {
       if (left instanceof Double d1 && right instanceof Double d2 && doubleOp != null) {
         return doubleOp.applyAsDouble(d1, d2);
       }
-    }
-    catch (ArithmeticException ex) {
+    } catch (ArithmeticException ex) {
       return ex;
     }
     return null;

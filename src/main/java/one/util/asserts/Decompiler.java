@@ -177,9 +177,12 @@ final class Decompiler {
               valueText(op.operands().getFirst(), precedence) +" instanceof " + formatTypeName(instanceOf.type());
       case Interpreter.ThisOp _ -> "this";
       case CoreOp.QuotedOp quoted -> {
-        List<Body> bodies = quoted.bodies();
-        if (bodies.size() == 1) {
-          Body body = bodies.getFirst();
+        // TODO: lambdas; instance-bound MR; static method MR; constructor MR
+        CoreOp.InvokeOp invokeOp = Util.extractMethodReference(quoted);
+        if (invokeOp != null) {
+          String type = formatTypeName(invokeOp.invokeDescriptor().refType());
+          String name = invokeOp.invokeDescriptor().name();
+          yield type + "::" + name;
         }
         yield op.toText() + ":" + op.getClass();
       }
