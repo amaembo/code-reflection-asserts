@@ -113,10 +113,10 @@ final class Interpreter {
         CoreOp.LambdaOp lambdaOp = Util.extractLambda(quoted);
         if (lambdaOp != null) {
           CoreOp.InvokeOp invokeOp = lambdaOp.methodReference().orElse(null);
-          if (invokeOp != null && lambdaOp.functionalInterface() instanceof JavaType javaType) {
+          if (invokeOp != null) {
             try {
               MethodHandle handle = invokeOp.invokeDescriptor().resolveToHandle(lookup);
-              Class<?> aClass = javaType.toNominalDescriptor().resolveConstantDesc(lookup);
+              Class<?> aClass = toClass(lambdaOp.functionalInterface());
               Method sam = Stream.of(aClass.getMethods()).filter(m -> Modifier.isAbstract(m.getModifiers()))
                       .findFirst().orElseThrow(() -> new ReflectiveOperationException("No SAM found in " + aClass));
               MethodType samMethodType = MethodType.methodType(sam.getReturnType(), sam.getParameterTypes());
