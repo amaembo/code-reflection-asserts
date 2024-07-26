@@ -1,13 +1,12 @@
 package one.util.asserts;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
+import java.lang.invoke.*;
 import java.lang.reflect.*;
 import java.lang.reflect.code.*;
 import java.lang.reflect.code.op.CoreOp;
 import java.lang.reflect.code.op.ExtendedOp;
 import java.lang.reflect.code.type.ArrayType;
+import java.lang.reflect.code.type.FunctionType;
 import java.lang.reflect.code.type.JavaType;
 import java.lang.reflect.code.type.MethodRef;
 import java.util.ArrayList;
@@ -116,30 +115,17 @@ final class Interpreter {
           CoreOp.InvokeOp invokeOp = lambdaOp.methodReference().orElse(null);
           if (invokeOp != null && lambdaOp.functionalInterface() instanceof JavaType javaType) {
             try {
-              Executable executable = invokeOp.invokeDescriptor().resolveToMember(lookup);
-              if (!(executable instanceof Method target)) {
-                throw new ReflectiveOperationException("Not method: " + executable);
-              }
+              MethodHandle handle = invokeOp.invokeDescriptor().resolveToHandle(lookup);
               Class<?> aClass = javaType.toNominalDescriptor().resolveConstantDesc(lookup);
-              Object methodRefProxy = Proxy.newProxyInstance(aClass.getClassLoader(), new Class[]{aClass}, (proxy, method, args) -> {
-                if (Modifier.isAbstract(method.getModifiers())) {
-                  return target.invoke(args[0], Arrays.copyOfRange(args, 1, args.length));
-                }
-                if (method.getDeclaringClass() == Object.class) {
-                  return switch (method.getName()) {
-                    case "equals" -> proxy == args[0];
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "toString" -> "lambda_" + target.getName();
-                    default -> throw new AssertionError();
-                  };
-                }
-                if (method.isDefault()) {
-                  return InvocationHandler.invokeDefault(proxy, method, args);
-                }
-                throw new AssertionError("Unexpected method: " + method);
-              });
-              yield new ValueNode(quoted, methodRefProxy, List.of());
-            } catch (ReflectiveOperationException e) {
+              Method sam = Stream.of(aClass.getMethods()).filter(m -> Modifier.isAbstract(m.getModifiers()))
+                      .findFirst().orElseThrow(() -> new ReflectiveOperationException("No SAM found in " + aClass));
+              MethodType samMethodType = MethodType.methodType(sam.getReturnType(), sam.getParameterTypes());
+              MethodType dynamicType = toMethodType(lambdaOp.invokableType());
+              CallSite callSite = LambdaMetafactory.metafactory(lookup, sam.getName(), MethodType.methodType(aClass),
+                      samMethodType, handle, dynamicType);
+              Object lambda = callSite.dynamicInvoker().invoke();
+              yield new ValueNode(quoted, lambda, List.of());
+            } catch (Throwable e) {
               yield new ExceptionNode(quoted, e, List.of());
             }
           }
@@ -415,6 +401,12 @@ final class Interpreter {
       // TODO: method ref?
       default -> new UnsupportedNode(op, List.of());
     };
+  }
+
+  private MethodType toMethodType(FunctionType functionType) {
+    Class<?> rType = toClass(functionType.returnType());
+    Class<?>[] pTypes = functionType.parameterTypes().stream().map(this::toClass).toArray(Class[]::new);
+    return MethodType.methodType(rType, pTypes);
   }
 
   private Class<?> toClass(TypeElement typeElement) {
