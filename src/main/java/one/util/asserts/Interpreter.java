@@ -129,11 +129,14 @@ final class Interpreter {
                   return switch (method.getName()) {
                     case "equals" -> proxy == args[0];
                     case "hashCode" -> System.identityHashCode(proxy);
-                    case "toString" -> "lambda_" + Integer.toHexString(System.identityHashCode(proxy));
+                    case "toString" -> "lambda_" + target.getName();
                     default -> throw new AssertionError();
                   };
                 }
-                return method.invoke(proxy, args);
+                if (method.isDefault()) {
+                  return InvocationHandler.invokeDefault(proxy, method, args);
+                }
+                throw new AssertionError("Unexpected method: " + method);
               });
               yield new ValueNode(quoted, methodRefProxy, List.of());
             } catch (ReflectiveOperationException e) {

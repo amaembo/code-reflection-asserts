@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.code.Quoted;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -294,6 +295,15 @@ public final class InterpreterTest {
             """);
   }
   
+  interface Fn extends Function<String, Integer> {
+    int base(String value);
+
+    @Override
+    default Integer apply(String s) {
+      return base(s) * 2;
+    }
+  }
+  
   @Test
   public void testMethodRef() {
     doTest(() -> Optional.of("").filter(String::isEmpty).isPresent(), """
@@ -305,6 +315,17 @@ public final class InterpreterTest {
             Optional.of("xyz") -> Optional[xyz]
             Optional.of("xyz").filter(String::isEmpty) -> Optional.empty
             Optional.of("xyz").filter(String::isEmpty).isPresent() -> false
+            """);
+    doTest(() -> Optional.of("xyz").map(String::length).isPresent(), """
+            Optional.of("xyz") -> Optional[xyz]
+            Optional.of("xyz").map(String::length) -> Optional[3]
+            Optional.of("xyz").map(String::length).isPresent() -> true
+            """);
+    // TODO: try to keep cast in decompilation
+    doTest(() -> Optional.of("xyz").map((Fn)String::length).isPresent(), """
+            Optional.of("xyz") -> Optional[xyz]
+            Optional.of("xyz").map(String::length) -> Optional[6]
+            Optional.of("xyz").map(String::length).isPresent() -> true
             """);
   }
   
